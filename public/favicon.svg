@@ -1,1 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#e8590c"/><path d="M12 9v14l11-7z" fill="#fff"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Backyard Streams">
+  <rect width="64" height="64" rx="14" fill="#e8590c"/>
+  <rect x="10" y="12" width="44" height="31" rx="5" fill="#fff"/>
+  <path d="M28 22v11l10.5-5.5z" fill="#e8590c"/>
+  <path d="M32 43v6M23 51h18" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+</svg>
