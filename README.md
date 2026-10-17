@@ -21,7 +21,8 @@ jeder Stream lässt sich per Knopf stumm/laut schalten.
 ```bash
 git clone https://github.com/Fabian5231/backyard.git /opt/backyard-streams
 cd /opt/backyard-streams
-nano docker-compose.yml        # ADMIN_PASSWORD ändern
+cp .env.example .env
+nano .env                      # ADMIN_PASSWORD setzen
 docker compose up -d --build
 ```
 

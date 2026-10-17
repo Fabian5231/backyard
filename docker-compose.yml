@@ -6,6 +6,6 @@ services:
     ports:
       - "127.0.0.1:8080:8080"   # nur lokal – davor kommt Caddy/Nginx mit HTTPS
     environment:
-      ADMIN_PASSWORD: "bitte-aendern"   # Passwort zum Bearbeiten der Stream-Liste
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD in .env setzen}   # Passwort zum Bearbeiten der Stream-Liste
     volumes:
       - ./data:/data
