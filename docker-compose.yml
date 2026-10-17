@@ -1,0 +1,11 @@
+services:
+  backyard-streams:
+    build: .
+    container_name: backyard-streams
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"   # nur lokal – davor kommt Caddy/Nginx mit HTTPS
+    environment:
+      ADMIN_PASSWORD: "bitte-aendern"   # Passwort zum Bearbeiten der Stream-Liste
+    volumes:
+      - ./data:/data

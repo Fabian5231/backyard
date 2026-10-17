@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Backyard Streams</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <h1>Backyard Streams</h1>
+    <span id="audio-status" class="status">Alle stumm</span>
+    <div class="spacer"></div>
+    <label class="toggle" title="Beim Einschalten eines Streams werden alle anderen stumm geschaltet">
+      <input type="checkbox" id="exclusive"> Nur einer laut
+    </label>
+    <label class="select">Spalten
+      <select id="columns">
+        <option value="auto">Auto</option>
+        <option>1</option><option>2</option><option>3</option>
+        <option>4</option><option>5</option><option>6</option>
+      </select>
+    </label>
+    <button id="mute-all" class="btn">Alle stumm <kbd>M</kbd></button>
+    <button id="edit-toggle" class="btn">Streams bearbeiten</button>
+  </header>
+
+  <section id="editor" class="editor" hidden>
+    <h2>Streams</h2>
+    <p class="hint">
+      Unterstützt: YouTube (Video-Link, <code>/live/…</code>, Kanal-Link <code>/channel/UC…</code> oder <code>/@name</code>)
+      und Twitch (<code>twitch.tv/kanal</code>). Andere Links werden als normales iframe eingebunden – dort lässt sich der Ton nicht per Knopf steuern.
+    </p>
+    <ol id="edit-list" class="edit-list"></ol>
+    <form id="add-form" class="add-form">
+      <input name="name" placeholder="Land / Name, z. B. 🇩🇪 Deutschland" required maxlength="80">
+      <input name="url" placeholder="https://www.youtube.com/watch?v=…" required>
+      <button class="btn primary">Hinzufügen</button>
+    </form>
+    <p id="editor-msg" class="msg" role="status"></p>
+  </section>
+
+  <main id="grid" class="grid"></main>
+  <p id="empty" class="empty" hidden>Noch keine Streams. Über „Streams bearbeiten“ welche hinzufügen.</p>
+
+  <footer class="keys">
+    Tasten: <kbd>1</kbd>–<kbd>9</kbd> Stream laut/stumm · <kbd>Shift</kbd>+<kbd>1</kbd>–<kbd>9</kbd> nur diesen hören · <kbd>M</kbd> alle stumm
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

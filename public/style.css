@@ -1,0 +1,146 @@
+:root {
+  --bg: #0f1115;
+  --panel: #181b22;
+  --panel-2: #20242d;
+  --text: #e8eaef;
+  --muted: #8b92a1;
+  --accent: #e8590c;
+  --live: #2fb344;
+  --border: #2a2f3a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.bar h1 { margin: 0; font-size: 17px; }
+.spacer { flex: 1; }
+.status { color: var(--muted); }
+.status.on { color: var(--live); font-weight: 600; }
+
+.btn {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.small { padding: 3px 8px; font-size: 13px; }
+.btn.danger:hover { border-color: #e03131; color: #ff8787; }
+
+kbd {
+  font: 11px ui-monospace, monospace;
+  padding: 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+}
+
+.toggle, .select { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+select, input {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+
+/* Editor */
+.editor {
+  padding: 12px 16px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.editor h2 { margin: 0 0 6px; font-size: 15px; }
+.hint { margin: 0 0 10px; color: var(--muted); max-width: 900px; }
+.hint code { color: var(--text); }
+.edit-list { margin: 0 0 10px; padding: 0; list-style: none; display: grid; gap: 6px; }
+.edit-list li { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.edit-list .num { width: 22px; color: var(--muted); text-align: right; }
+.edit-list input[name="name"] { width: 220px; }
+.edit-list input[name="url"] { flex: 1; min-width: 240px; }
+.add-form { display: flex; gap: 6px; flex-wrap: wrap; }
+.add-form input[name="name"] { width: 248px; }
+.add-form input[name="url"] { flex: 1; min-width: 240px; }
+.msg { margin: 8px 0 0; min-height: 1.4em; color: var(--muted); }
+.msg.error { color: #ff8787; }
+
+/* Grid */
+.grid {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--min, 380px), 1fr));
+  grid-auto-flow: dense;
+}
+.empty { text-align: center; color: var(--muted); padding: 60px 16px; }
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.tile.audible { border-color: var(--live); }
+.tile.big { grid-column: span 2; grid-row: span 2; }
+
+.video { position: relative; aspect-ratio: 16 / 9; background: #000; flex: 1; }
+.video > iframe, .video > div { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.video .error {
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--panel-2);
+}
+.controls .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.controls .name .idx { color: var(--muted); font-weight: 400; margin-right: 4px; }
+.controls [hidden] { display: none; }
+.controls input[type="range"] { width: 70px; padding: 0; accent-color: var(--live); }
+
+.mute {
+  min-width: 92px;
+  font-weight: 600;
+}
+.tile.audible .mute { background: var(--live); border-color: var(--live); color: #fff; }
+.mute:disabled { opacity: .5; cursor: not-allowed; }
+
+.keys { padding: 4px 16px 16px; color: var(--muted); font-size: 12px; }
+
+@media (max-width: 800px) {
+  .tile.big { grid-column: auto; grid-row: auto; }
+  .grid { --min: 280px; }
+}

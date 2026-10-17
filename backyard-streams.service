@@ -1,0 +1,16 @@
+# Alternative ohne Docker: nach /etc/systemd/system/ kopieren,
+# Pfad anpassen, dann: systemctl enable --now backyard-streams
+[Unit]
+Description=Backyard Streams
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/backyard-streams
+ExecStart=/usr/bin/node server.js
+Environment=PORT=8080
+Environment=ADMIN_PASSWORD=bitte-aendern
+Restart=always
+User=www-data
+
+[Install]
+WantedBy=multi-user.target
