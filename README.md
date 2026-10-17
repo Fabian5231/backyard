@@ -19,11 +19,13 @@ jeder Stream lässt sich per Knopf stumm/laut schalten.
 ## Installation mit Docker (empfohlen)
 
 ```bash
-# Ordner auf den VPS kopieren, z. B. nach /opt/backyard-streams
+git clone https://github.com/Fabian5231/backyard.git /opt/backyard-streams
 cd /opt/backyard-streams
 nano docker-compose.yml        # ADMIN_PASSWORD ändern
 docker compose up -d --build
 ```
+
+Updates später: `git pull && docker compose up -d --build`
 
 Die App lauscht danach auf `127.0.0.1:8080`. Davor einen Reverse-Proxy mit HTTPS setzen,
 z. B. Caddy (siehe `Caddyfile.example`):
