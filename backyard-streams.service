@@ -8,6 +8,7 @@ After=network.target
 WorkingDirectory=/opt/backyard-streams
 ExecStart=/usr/bin/node server.js
 Environment=PORT=8080
+Environment=HOST=127.0.0.1
 Environment=ADMIN_PASSWORD=bitte-aendern
 Restart=always
 User=www-data

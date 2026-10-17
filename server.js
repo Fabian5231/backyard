@@ -7,6 +7,9 @@ const path = require("path");
 const crypto = require("crypto");
 
 const PORT = Number(process.env.PORT) || 8080;
+// Hinter einem Reverse-Proxy auf 127.0.0.1 setzen. Im Container muss es
+// 0.0.0.0 bleiben, sonst kommt das Port-Mapping von Docker nicht an.
+const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "streams.json");
@@ -129,7 +132,7 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Backyard Streams läuft auf http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  console.log(`Backyard Streams läuft auf http://${HOST}:${PORT}`);
   if (!ADMIN_PASSWORD) console.log("Hinweis: ADMIN_PASSWORD ist nicht gesetzt – jeder kann die Stream-Liste ändern.");
 });
