@@ -49,7 +49,7 @@ bestehenden Bedienelemente unverändert weiter.
 | Twitch-Voraussetzungen wurden nicht geprüft | Twitch verweigert Embeds ohne HTTPS und mit einer IP als `parent`. Sichtbar war nur ein schwarzes Rechteck. | Prüfung von `location.protocol` und Hostname **vor** dem Laden, mit konkreter Anweisung |
 | Keine `Referrer-Policy` | Setzt ein Reverse-Proxy `no-referrer`, lehnen YouTube und Twitch die Einbettung ab – schwer zu finden. | Server sendet ausdrücklich `strict-origin-when-cross-origin` |
 | Fremde iframes ohne Ausweg | `X-Frame-Options`/`frame-ancestors` der Gegenseite lässt sich im Frontend **nicht** erkennen: kein Event, kein Fehler. | Dauerhafter Link „Lädt nicht? Beim Anbieter öffnen“ in der Kachel |
-| `/api/resolve` war offen | Jeder konnte den Server fremde Seiten abrufen lassen. | Nur noch für Admins |
+| `/api/resolve` ist offen | Jeder kann den Server fremde Seiten abrufen lassen – auf Wunsch des Betreibers ohne Passwort. | Eingeschränkt auf `youtube.com/@name`-Links; Zugangsschutz gehört, wenn gewünscht, in den Reverse-Proxy |
 
 Zur Einordnung der einzelnen Mechanismen:
 
@@ -106,8 +106,8 @@ sie nicht; sie zeigt lediglich, was der Player meldet.
 
 ### 2.4 Diagnose im Betrieb
 
-Im Editor hat jeder Eintrag einen Knopf **Diagnose** (nur für Admins,
-`GET /api/diagnose?url=…`). Der Server fragt beim Anbieter nach und zeigt die
+Im Editor hat jeder Eintrag einen Knopf **Diagnose**
+(`GET /api/diagnose?url=…`, ohne Passwort erreichbar, nur YouTube/Twitch). Der Server fragt beim Anbieter nach und zeigt die
 Rohwerte zusammen mit ihrer Deutung:
 
 * YouTube-Video: oEmbed-Status, `playableInEmbed`, `playabilityStatus` und der
@@ -268,11 +268,13 @@ Kachel eine verständliche Meldung und einen Link zum Anbieter.
 Drei Stufen, jede für sich wirksam:
 
 1. **Zuschauer übergeben keine URL.** `POST /api/browser/sessions` nimmt nur
-   eine Stream-Id. Die Adresse holt der Server aus `data/streams.json`, und die
-   ist nur mit Admin-Passwort änderbar. Ein mitgeschicktes `url`-Feld hat keine
-   Wirkung (durch einen Test abgesichert).
-2. **`mode: "browser"` muss am Eintrag stehen** – das setzt nur ein Admin, und
-   es wird verworfen, solange der Zusatzmodus nicht läuft.
+   eine Stream-Id. Die Adresse holt der Server aus `data/streams.json`. Ein
+   mitgeschicktes `url`-Feld hat keine Wirkung (durch einen Test abgesichert).
+   Achtung: `PUT /api/streams` ist nicht passwortgeschützt – wer die Oberfläche
+   erreicht, kann Einträge anlegen. Wird dieser Zusatzmodus eingeschaltet,
+   gehört die Seite daher hinter einen eigenen Zugangsschutz (Reverse-Proxy).
+2. **`mode: "browser"` muss am Eintrag stehen** – es wird verworfen, solange
+   der Zusatzmodus nicht läuft.
 3. **Hostfreigabe im Browser-Dienst.** Ohne `BROWSER_ALLOWED_HOSTS` bzw.
    `BROWSER_ALLOWED_PRESETS` startet keine Sitzung.
 
@@ -382,7 +384,7 @@ Testquelle (`public/browser-test-source.html`: animiertes Canvas plus Ton),
 
 ```bash
 cp .env.example .env
-nano .env     # ADMIN_PASSWORD, BROWSER_PLAYBACK=1,
+nano .env     # BROWSER_PLAYBACK=1,
               # BROWSER_SERVICE_TOKEN (openssl rand -hex 32),
               # BROWSER_PUBLIC_HOST, BROWSER_ALLOWED_HOSTS
 

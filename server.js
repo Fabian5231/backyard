@@ -14,7 +14,6 @@ const PORT = Number(process.env.PORT) || 8080;
 // Hinter einem Reverse-Proxy auf 127.0.0.1 setzen. Im Container muss es
 // 0.0.0.0 bleiben, sonst kommt das Port-Mapping von Docker nicht an.
 const HOST = process.env.HOST || "0.0.0.0";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "streams.json");
 const PUBLIC_DIR = path.join(__dirname, "public");
@@ -72,11 +71,6 @@ function sanitize(list) {
     if (s?.mode === "browser" && BROWSER_PLAYBACK) entry.mode = "browser";
     return entry;
   });
-}
-
-function isAdmin(req) {
-  if (!ADMIN_PASSWORD) return true;
-  return headerMatches(req, "x-admin-password", ADMIN_PASSWORD);
 }
 
 /** Zeitkonstanter Vergleich eines Headers mit einem Geheimnis. */
@@ -379,7 +373,6 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === "/api/streams") {
     if (req.method === "GET") return send(res, 200, readStreams());
     if (req.method === "PUT") {
-      if (!isAdmin(req)) return send(res, 401, { error: "Falsches Passwort" });
       try {
         const list = sanitize(JSON.parse(await readBody(req)));
         writeStreams(list);
@@ -392,9 +385,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   // YouTube-@Handles lassen sich nicht direkt einbetten – hier in eine Kanal-ID übersetzen.
-  // Nur für Admins: der Server holt dafür eine fremde Seite ab.
+  // Der Server holt dafür eine fremde Seite ab; angenommen werden nur youtube.com/@name-Links.
   if (url.pathname === "/api/resolve") {
-    if (!isAdmin(req)) return send(res, 401, { error: "Falsches Passwort" });
     const m = /^https?:\/\/(?:www\.|m\.)?youtube\.com\/(@[\w.\-]{1,100})/i.exec(url.searchParams.get("url") || "");
     if (!m) return send(res, 400, { error: "Nur youtube.com/@name-Links werden aufgelöst" });
     try {
@@ -411,7 +403,6 @@ const server = http.createServer(async (req, res) => {
 
   // Diagnose: warum läuft ein Link in der Einbettung nicht?
   if (url.pathname === "/api/diagnose") {
-    if (!isAdmin(req)) return send(res, 401, { error: "Falsches Passwort" });
     try {
       const report = await diagnose(url.searchParams.get("url") || "");
       return send(res, report.error ? 400 : 200, report);
@@ -440,7 +431,7 @@ const server = http.createServer(async (req, res) => {
 if (require.main === module) {
   server.listen(PORT, HOST, () => {
     console.log(`Backyard Streams läuft auf http://${HOST}:${PORT}`);
-    if (!ADMIN_PASSWORD) console.log("Hinweis: ADMIN_PASSWORD ist nicht gesetzt – jeder kann die Stream-Liste ändern.");
+    console.log("Hinweis: Die Stream-Liste ist ohne Passwort änderbar.");
     if (BROWSER_PLAYBACK) {
       console.log(`Browser-Wiedergabe ist eingeschaltet (Dienst: ${BROWSER_SERVICE_URL}).`);
       if (!BROWSER_SERVICE_TOKEN) {

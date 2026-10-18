@@ -24,7 +24,7 @@ async function startServer(env = {}) {
   const port = await freePort();
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "bys-test-"));
   const child = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
-    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", DATA_DIR: dataDir, ADMIN_PASSWORD: "geheim", ...env },
+    env: { ...process.env, PORT: String(port), HOST: "127.0.0.1", DATA_DIR: dataDir, ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
   const log = [];
@@ -52,21 +52,18 @@ async function startServer(env = {}) {
   };
 }
 
-const put = (base, body, password = "geheim") =>
+const put = (base, body) =>
   fetch(base + "/api/streams", {
     method: "PUT",
-    headers: { "Content-Type": "application/json", "X-Admin-Password": password },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 
-test("Stream-Liste lesen und schreiben, Passwort wird geprüft", async (t) => {
+test("Stream-Liste lesen und schreiben, ohne Passwort", async (t) => {
   const srv = await startServer();
   t.after(() => srv.stop());
 
   assert.deepEqual(await (await fetch(srv.base + "/api/streams")).json(), []);
-
-  const wrong = await put(srv.base, [{ name: "A", url: "https://example.com/a" }], "falsch");
-  assert.equal(wrong.status, 401);
 
   const ok = await put(srv.base, [{ name: "A", url: "https://example.com/a" }]);
   assert.equal(ok.status, 200);
@@ -167,23 +164,21 @@ test("Sitzungsendpunkte brauchen ein Token in gültiger Form", async (t) => {
   }
 });
 
-test("Diagnose ist nur für Admins und nur für YouTube/Twitch", async (t) => {
+test("Diagnose nimmt nur YouTube/Twitch", async (t) => {
   const srv = await startServer();
   t.after(() => srv.stop());
 
-  assert.equal((await fetch(srv.base + "/api/diagnose?url=https://www.youtube.com/watch?v=x")).status, 401);
-
-  const res = await fetch(srv.base + "/api/diagnose?url=https://example.com/", {
-    headers: { "X-Admin-Password": "geheim" },
-  });
+  const res = await fetch(srv.base + "/api/diagnose?url=https://example.com/");
   assert.equal(res.status, 400);
   assert.match((await res.json()).error, /YouTube- und Twitch/);
 });
 
-test("Kanal-Auflösung ist nur für Admins", async (t) => {
+test("Kanal-Auflösung nimmt nur youtube.com/@name-Links", async (t) => {
   const srv = await startServer();
   t.after(() => srv.stop());
-  assert.equal((await fetch(srv.base + "/api/resolve?url=https://www.youtube.com/@test")).status, 401);
+  const res = await fetch(srv.base + "/api/resolve?url=https://example.com/");
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /@name-Links/);
 });
 
 test("statische Dateien: kein Ausbruch aus public/", async (t) => {

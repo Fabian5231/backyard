@@ -6,7 +6,6 @@ services:
     ports:
       - "127.0.0.1:8080:8080"   # nur lokal – davor kommt Caddy/Nginx mit HTTPS
     environment:
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD in .env setzen}   # Passwort zum Bearbeiten der Stream-Liste
       # Zusatzmodus Browser-Wiedergabe: standardmäßig aus. Zum Einschalten
       # BROWSER_PLAYBACK=1 in .env setzen und `--profile browser` verwenden.
       BROWSER_PLAYBACK: ${BROWSER_PLAYBACK:-0}

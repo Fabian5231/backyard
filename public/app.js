@@ -610,16 +610,13 @@ function message(text, isError = false) {
   m.classList.toggle("error", isError);
 }
 
-/** Server-Diagnose für einen Link anzeigen (nur Admin). */
+/** Server-Diagnose für einen Link anzeigen. */
 async function runDiagnose(url) {
   const out = $("#diagnose-out");
   out.hidden = false;
   out.textContent = "Wird geprüft …";
-  const headers = {};
-  const pw = store("password");
-  if (pw) headers["X-Admin-Password"] = pw;
   try {
-    const res = await fetch("/api/diagnose?url=" + encodeURIComponent(url), { headers });
+    const res = await fetch("/api/diagnose?url=" + encodeURIComponent(url));
     const body = await res.json();
     if (!res.ok) throw new Error(body.error || `Fehler ${res.status}`);
     const lines = [`${body.url}`, `Erkannt als: ${body.kind || "unbekannt"}`, ""];
@@ -632,10 +629,7 @@ async function runDiagnose(url) {
 }
 
 async function resolveHandle(url) {
-  const headers = {};
-  const pw = store("password");
-  if (pw) headers["X-Admin-Password"] = pw;
-  const res = await fetch("/api/resolve?url=" + encodeURIComponent(url), { headers });
+  const res = await fetch("/api/resolve?url=" + encodeURIComponent(url));
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || "Kanal nicht gefunden");
   return "https://www.youtube.com/channel/" + body.channelId;
@@ -658,17 +652,12 @@ async function edit(mutator) {
   renderEditor();
 }
 
-async function save(streams, retry = true) {
-  const headers = { "Content-Type": "application/json" };
-  const pw = store("password");
-  if (pw) headers["X-Admin-Password"] = pw;
-  const res = await fetch("/api/streams", { method: "PUT", headers, body: JSON.stringify(streams) });
-  if (res.status === 401 && retry) {
-    const entered = prompt("Admin-Passwort zum Bearbeiten:");
-    if (entered === null) throw new Error("Nicht gespeichert – Passwort erforderlich.");
-    store("password", entered);
-    return save(streams, true);
-  }
+async function save(streams) {
+  const res = await fetch("/api/streams", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(streams),
+  });
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || "Speichern fehlgeschlagen");
   state.streams = body;

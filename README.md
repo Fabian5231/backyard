@@ -10,7 +10,8 @@ jeder Stream lässt sich per Knopf stumm/laut schalten.
 - **„Nur einer laut“** (oben): Einschalten eines Streams schaltet die anderen automatisch stumm
 - **Alle stumm**, Spaltenanzahl wählbar
 - Tastatur: `1`–`9` Stream laut/stumm, `Shift`+`1`–`9` Solo, `M` alle stumm
-- Stream-Liste wird auf dem Server gespeichert (`data/streams.json`) – gilt für alle Geräte; Bearbeiten mit Passwort
+- Stream-Liste wird auf dem Server gespeichert (`data/streams.json`) – gilt für alle Geräte; Bearbeiten ohne Passwort,
+  wer die Seite erreicht, kann die Liste ändern (gehört also hinter ein eigenes Zugangsschutz, wenn das nicht gewollt ist)
 - Läuft eine Einbettung nicht, zeigt die Kachel **den Grund** und einen Link zum Anbieter
 - **Diagnose** je Eintrag im Editor: der Server fragt beim Anbieter nach, warum ein Link nicht läuft
 - Optional: **Browser-Wiedergabe** für eigene oder ausdrücklich freigegebene Quellen
@@ -26,8 +27,7 @@ jeder Stream lässt sich per Knopf stumm/laut schalten.
 ```bash
 git clone https://github.com/Fabian5231/backyard.git /opt/backyard-streams
 cd /opt/backyard-streams
-cp .env.example .env
-nano .env                      # ADMIN_PASSWORD setzen
+cp .env.example .env           # nur für die optionale Browser-Wiedergabe nötig
 docker compose up -d --build
 ```
 
@@ -57,10 +57,10 @@ streams.deine-domain.de {
 Benötigt nur Node.js ≥ 18, keine weiteren Pakete:
 
 ```bash
-ADMIN_PASSWORD=geheim PORT=8080 node server.js
+PORT=8080 node server.js
 ```
 
-Als Dienst: `backyard-streams.service` nach `/etc/systemd/system/` kopieren, Pfad/Passwort anpassen,
+Als Dienst: `backyard-streams.service` nach `/etc/systemd/system/` kopieren, Pfad anpassen,
 `chown -R www-data /opt/backyard-streams/data`, dann `systemctl enable --now backyard-streams`.
 
 Tests: `npm test` (nur Node-Standardbibliothek, kein Docker nötig).
@@ -71,7 +71,6 @@ Tests: `npm test` (nur Node-Standardbibliothek, kein Docker nötig).
 |------------------|-----------|-----------------------------------------------------------|
 | `PORT`           | `8080`    | Port des Servers                                          |
 | `HOST`           | `0.0.0.0` | Adresse, auf der gelauscht wird                           |
-| `ADMIN_PASSWORD` | *(leer)*  | Passwort zum Bearbeiten der Liste. Leer = jeder darf ändern |
 | `DATA_DIR`       | `./data`  | Speicherort von `streams.json`                            |
 | `BROWSER_PLAYBACK` | `0`     | Zusatzmodus Browser-Wiedergabe einschalten ([Doku](docs/BROWSER_PLAYBACK.md)) |
 
