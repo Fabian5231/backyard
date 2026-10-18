@@ -33,6 +33,17 @@
       Unterstützt: YouTube (Video-Link, <code>/live/…</code>, Kanal-Link <code>/channel/UC…</code> oder <code>/@name</code>)
       und Twitch (<code>twitch.tv/kanal</code>). Andere Links werden als normales iframe eingebunden – dort lässt sich der Ton nicht per Knopf steuern.
     </p>
+    <p class="hint">
+      <strong>Kanal-Links</strong> zeigen den Livestream nur, solange YouTube das alte
+      <code>/embed/live_stream</code>-Verfahren für den Kanal beantwortet. Das ist nicht zugesichert: läuft kein Stream oder
+      antwortet YouTube nicht, bleibt die Kachel leer. Verlässlich ist der direkte Link des laufenden Streams.
+      Mit <strong>Diagnose</strong> prüft der Server, was der Anbieter zu einem Link meldet.
+    </p>
+    <p class="hint browser-only" hidden>
+      <strong>Browser:</strong> spielt die Seite in einem serverseitigen Browser ab und überträgt Bild und Ton per WebRTC.
+      Nur für eigene Quellen oder solche, für die eine ausdrückliche Erlaubnis zur Wiedergabe und Weitergabe vorliegt.
+    </p>
+    <pre id="diagnose-out" class="diagnose" hidden></pre>
     <ol id="edit-list" class="edit-list"></ol>
     <form id="add-form" class="add-form">
       <input name="name" placeholder="Land / Name, z. B. 🇩🇪 Deutschland" required maxlength="80">
@@ -49,6 +60,7 @@
     Tasten: <kbd>1</kbd>–<kbd>9</kbd> Stream laut/stumm · <kbd>Shift</kbd>+<kbd>1</kbd>–<kbd>9</kbd> nur diesen hören · <kbd>M</kbd> alle stumm
   </footer>
 
+  <script src="whep.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

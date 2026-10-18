@@ -7,5 +7,59 @@ services:
       - "127.0.0.1:8080:8080"   # nur lokal – davor kommt Caddy/Nginx mit HTTPS
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD in .env setzen}   # Passwort zum Bearbeiten der Stream-Liste
+      # Zusatzmodus Browser-Wiedergabe: standardmäßig aus. Zum Einschalten
+      # BROWSER_PLAYBACK=1 in .env setzen und `--profile browser` verwenden.
+      BROWSER_PLAYBACK: ${BROWSER_PLAYBACK:-0}
+      BROWSER_SERVICE_URL: http://backyard-browser:8090
+      BROWSER_SERVICE_TOKEN: ${BROWSER_SERVICE_TOKEN:-}
+      BROWSER_VIEWER_PASSWORD: ${BROWSER_VIEWER_PASSWORD:-}
+      TRUST_PROXY: ${TRUST_PROXY:-0}
     volumes:
       - ./data:/data
+
+  # Optionaler Zusatzmodus: serverseitiger Browser, Aufnahme als WebRTC.
+  # Startet nur mit:  docker compose --profile browser up -d --build
+  backyard-browser:
+    build: ./browser
+    container_name: backyard-browser
+    restart: unless-stopped
+    profiles: ["browser"]
+    # Der Steuerport bleibt im Docker-Netz. Nach außen muss nur der ICE-Port
+    # erreichbar sein, über den die Medien zum Zuschauer laufen.
+    ports:
+      - "8189:8189/udp"
+      - "8189:8189/tcp"
+    # Chromium braucht mehr als die 64 MB, die Docker standardmäßig gibt.
+    shm_size: "512mb"
+    # Kein privilegierter Container und keine zusätzlichen Capabilities.
+    # Die Chromium-Sandbox braucht unprivilegierte User-Namespaces; auf Hosts,
+    # die das per seccomp verbieten, hilft die Zeile unter security_opt.
+    security_opt:
+      - no-new-privileges:true
+      # - seccomp=./browser/seccomp-chromium.json
+    cap_drop: ["ALL"]
+    environment:
+      BROWSER_SERVICE_TOKEN: ${BROWSER_SERVICE_TOKEN:-}
+      # Welche Hosts der serverseitige Browser öffnen darf. Ohne Eintrag startet
+      # keine Sitzung. "youtube"/"twitch" sind Kurzformen für die jeweils
+      # nötigen Medien- und CDN-Domains.
+      BROWSER_ALLOWED_HOSTS: ${BROWSER_ALLOWED_HOSTS:-}
+      BROWSER_ALLOWED_PRESETS: ${BROWSER_ALLOWED_PRESETS:-}
+      # Öffentlicher Name oder IP dieses Servers – ohne das findet der Browser
+      # des Zuschauers keinen Weg zu den Medien.
+      MTX_WEBRTCADDITIONALHOSTS: ${BROWSER_PUBLIC_HOST:-}
+      # Grenzen (Standardwerte siehe docs/BROWSER_PLAYBACK.md)
+      BROWSER_MAX_SESSIONS: ${BROWSER_MAX_SESSIONS:-2}
+      BROWSER_WIDTH: ${BROWSER_WIDTH:-1280}
+      BROWSER_HEIGHT: ${BROWSER_HEIGHT:-720}
+      BROWSER_FPS: ${BROWSER_FPS:-25}
+      BROWSER_VIDEO_BITRATE: ${BROWSER_VIDEO_BITRATE:-2500k}
+      BROWSER_VIDEO_CODEC: ${BROWSER_VIDEO_CODEC:-h264}
+      BROWSER_IDLE_TIMEOUT: ${BROWSER_IDLE_TIMEOUT:-90}
+      BROWSER_MAX_SESSION_SECONDS: ${BROWSER_MAX_SESSION_SECONDS:-14400}
+    # Begrenzt, was der Container höchstens vom Server nehmen kann.
+    deploy:
+      resources:
+        limits:
+          cpus: ${BROWSER_CPU_LIMIT:-2.0}
+          memory: ${BROWSER_MEMORY_LIMIT:-2g}

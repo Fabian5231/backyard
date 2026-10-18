@@ -144,3 +144,70 @@ select, input {
   .tile.big { grid-column: auto; grid-row: auto; }
   .grid { --min: 280px; }
 }
+
+/* Diagnose-Ausgabe im Editor */
+.diagnose {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font: 12px/1.5 ui-monospace, monospace;
+  white-space: pre-wrap;
+}
+.edit-list .mode { display: flex; align-items: center; gap: 4px; color: var(--muted); white-space: nowrap; }
+.edit-list .mode input { width: auto; }
+
+/* Fehler und Status in der Kachel */
+.video .error { gap: 8px; align-content: center; }
+.video .error p { margin: 0; }
+.video .error .hint { margin: 0; font-size: 12px; }
+.video .status-box {
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  color: var(--muted);
+  text-align: center;
+}
+.tile.loading { border-color: var(--accent); }
+
+/* Dauerhafter Ausweg bei fremden iframes, die sich nicht einbetten lassen */
+.video .fallback-link {
+  position: absolute;
+  inset: auto 6px 6px auto;
+  z-index: 2;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(15, 17, 21, .78);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  text-decoration: none;
+}
+.video .fallback-link:hover { color: var(--text); border-color: var(--muted); }
+
+/* Browser-Wiedergabe */
+.video > video.browser-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  object-fit: contain;
+}
+.tile.browser-mode .controls .name::after {
+  content: "Browser";
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  vertical-align: middle;
+}
+.tile.offline { border-color: #7a3030; }

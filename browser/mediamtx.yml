@@ -1,0 +1,46 @@
+# Media-Server für die Browser-Wiedergabe.
+#
+# RTSP (ffmpeg -> Server) und die WHEP-Aushandlung hören nur auf 127.0.0.1;
+# erreichbar sind sie damit nur innerhalb des Containers. Von außen muss
+# ausschließlich der ICE-Port 8189 (UDP + TCP) erreichbar sein, über den die
+# Medien zum Browser des Zuschauers laufen.
+#
+# API, Metriken, pprof und Playback sind aus: keine offenen Debug-Ports.
+
+logLevel: info
+logDestinations: [stdout]
+readTimeout: 10s
+writeTimeout: 10s
+
+api: false
+metrics: false
+pprof: false
+playback: false
+
+rtmp: false
+srt: false
+hls: false
+moq: false
+
+rtsp: true
+rtspAddress: 127.0.0.1:8554
+rtspTransports: [tcp]
+rtspEncryption: "no"
+
+webrtc: true
+# Nur der Steuerdienst im selben Container spricht mit diesem Endpunkt.
+webrtcAddress: 127.0.0.1:8889
+webrtcAllowOrigins: ["*"]
+# ICE: derselbe Port als UDP und als TCP. Der TCP-Kandidat ist der zuverlässige
+# Weg durch strenge Firewalls und NAT, ohne TURN-Server.
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcIPsFromInterfaces: true
+# Öffentlicher Name/IP des Servers: über MTX_WEBRTCADDITIONALHOSTS setzen,
+# sonst kennt der Zuschauer nur die Container-IP und die Verbindung scheitert.
+webrtcAdditionalHosts: []
+webrtcHandshakeTimeout: 10s
+webrtcTrackGatherTimeout: 4s
+
+paths:
+  all_others:

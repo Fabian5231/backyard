@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Backyard – Testquelle für die Browser-Wiedergabe</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0f1115; color: #e8eaef;
+      font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    .note { position: fixed; left: 12px; bottom: 10px; color: #8b92a1; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <!--
+    Eigene Testquelle. Bewegtes Bild und ein wechselnder Ton (440/660 Hz) –
+    beides eindeutig messbar, damit sich prüfen lässt, ob Bild UND Ton
+    tatsächlich bis zur Kachel im Frontend durchkommen.
+    Diese Seite gehört zur Anwendung; es gibt keine Rechte Dritter daran.
+  -->
+  <canvas id="c" width="1280" height="720"></canvas>
+  <p class="note">Backyard Streams – Testquelle (bewegtes Bild, Ton wechselt jede Sekunde zwischen 440 Hz und 660 Hz)</p>
+  <script>
+    "use strict";
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+    let frame = 0;
+    const started = Date.now();
+
+    function draw() {
+      frame++;
+      ctx.fillStyle = "#0f1115";
+      ctx.fillRect(0, 0, 1280, 720);
+
+      // Raster, damit Kompressionsartefakte und Skalierung sichtbar werden.
+      ctx.strokeStyle = "#20242d";
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= 1280; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 720); ctx.stroke(); }
+      for (let y = 0; y <= 720; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(1280, y); ctx.stroke(); }
+
+      // Bewegtes Objekt: belegt, dass das Bild live ist und nicht steht.
+      const t = frame / 50;
+      ctx.fillStyle = "#2fb344";
+      ctx.beginPath();
+      ctx.arc(640 + 440 * Math.sin(t), 360 + 230 * Math.cos(t * 1.37), 64, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#e8eaef";
+      ctx.font = "bold 54px ui-monospace, monospace";
+      ctx.fillText("Backyard Testquelle", 40, 80);
+      ctx.font = "32px ui-monospace, monospace";
+      ctx.fillStyle = "#e8590c";
+      ctx.fillText("Bild " + frame, 40, 130);
+      ctx.fillText("Laufzeit " + ((Date.now() - started) / 1000).toFixed(1) + " s", 40, 174);
+      ctx.fillStyle = "#8b92a1";
+      ctx.font = "26px ui-monospace, monospace";
+      ctx.fillText(new Date().toISOString().replace("T", " ").slice(0, 19), 40, 680);
+      requestAnimationFrame(draw);
+    }
+    draw();
+
+    // Ton: Der serverseitige Browser startet mit
+    // --autoplay-policy=no-user-gesture-required, daher läuft der Oszillator
+    // ohne Klick. In einem normalen Browser erlaubt ein Klick den Ton.
+    let toneStarted = false;
+    function startTone() {
+      if (toneStarted) return;
+      toneStarted = true;
+      const audio = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 440;
+      gain.gain.value = 0.15;
+      osc.connect(gain).connect(audio.destination);
+      osc.start();
+      setInterval(() => { osc.frequency.value = osc.frequency.value === 440 ? 660 : 440; }, 1000);
+      if (audio.state === "suspended") audio.resume();
+    }
+    startTone();
+    document.addEventListener("click", startTone, { once: true });
+  </script>
+</body>
+</html>

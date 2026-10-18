@@ -7,6 +7,7 @@ const grid = $("#grid");
 const state = {
   streams: [],
   tiles: new Map(), // id -> Tile
+  browser: { enabled: false, requiresPassword: false },
 };
 
 // ---------- kleine Helfer ----------
@@ -40,20 +41,36 @@ function loadScript(src) {
   });
 }
 
+/** Wartet auf `promise`, bricht aber nach `ms` mit einer eigenen Meldung ab. */
+function withTimeout(promise, ms, message) {
+  let timer;
+  return Promise.race([
+    promise.finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
+
 let ytReady;
 function loadYouTubeApi() {
   if (!ytReady) {
-    ytReady = new Promise((resolve) => {
+    const ready = new Promise((resolve) => {
       window.onYouTubeIframeAPIReady = () => resolve(window.YT);
     });
-    loadScript("https://www.youtube.com/iframe_api");
+    // Ohne das Race bliebe ein Ladefehler des Skripts unbemerkt und die Kachel
+    // würde für immer „lädt“ anzeigen.
+    ytReady = Promise.race([ready, loadScript("https://www.youtube.com/iframe_api").then(() => ready)]);
   }
   return ytReady;
 }
 
 let twitchReady;
 function loadTwitchApi() {
-  twitchReady ??= loadScript("https://player.twitch.tv/js/embed/v1.js").then(() => window.Twitch);
+  twitchReady ??= loadScript("https://player.twitch.tv/js/embed/v1.js").then(() => {
+    if (!window.Twitch?.Player) throw new Error("Twitch-Player-Skript wurde geladen, meldet sich aber nicht");
+    return window.Twitch;
+  });
   return twitchReady;
 }
 
@@ -90,6 +107,18 @@ function parseStreamUrl(raw) {
   return { kind: "iframe", src: u.href };
 }
 
+/** Beschriftung für den „beim Anbieter öffnen“-Link einer Kachel. */
+function providerLabel(url) {
+  try {
+    const host = new URL(url).hostname.replace(/^(www\.|m\.)/, "");
+    if (host.endsWith("youtube.com") || host === "youtu.be") return "Auf YouTube öffnen";
+    if (host.endsWith("twitch.tv")) return "Auf Twitch öffnen";
+    return "Beim Anbieter öffnen";
+  } catch {
+    return "Beim Anbieter öffnen";
+  }
+}
+
 // ---------- Kachel pro Stream ----------
 
 class Tile {
@@ -98,6 +127,7 @@ class Tile {
     this.muted = true;
     this.volume = store("vol:" + stream.id) ?? 80;
     this.player = null; // { mute(), unmute(), setVolume(0..100) }
+    this.cleanups = [];
 
     this.video = el("div", { class: "video" });
     this.idx = el("span", { class: "idx" });
@@ -121,21 +151,61 @@ class Tile {
     this.mount();
   }
 
+  /** Fehler in der Kachel zeigen – immer mit Ausweg zum Anbieter. */
+  showError(message, hint) {
+    this.player = null;
+    this.muteBtn.disabled = true;
+    this.root.classList.remove("audible", "loading");
+    this.video.replaceChildren(
+      el("div", { class: "error" },
+        el("p", {}, message),
+        hint ? el("p", { class: "hint" }, hint) : "",
+        el("a", { class: "btn small", href: this.stream.url, target: "_blank", rel: "noopener noreferrer" },
+          providerLabel(this.stream.url)),
+      ),
+    );
+  }
+
+  setStatus(text) {
+    this.root.classList.add("loading");
+    this.video.replaceChildren(el("div", { class: "status-box" }, text));
+  }
+
   async mount() {
     const info = parseStreamUrl(this.stream.url);
     try {
-      if (info.kind === "youtube") await this.mountYouTube(info);
+      if (this.stream.mode === "browser") await this.mountBrowser();
+      else if (info.kind === "youtube") await this.mountYouTube(info);
       else if (info.kind === "twitch") await this.mountTwitch(info);
       else if (info.kind === "iframe") this.mountIframe(info.src);
       else throw new Error("Link wird nicht unterstützt: " + this.stream.url);
     } catch (err) {
-      this.video.replaceChildren(el("div", { class: "error" }, err.message));
+      // Halbfertige Sitzungen nicht liegen lassen: sonst läuft der Browser auf
+      // dem Server weiter, bis das Leerlauf-Timeout greift.
+      this.runCleanups();
+      this.showError(err.message);
     }
   }
 
+  runCleanups() {
+    for (const fn of this.cleanups.reverse()) {
+      try {
+        fn();
+      } catch {
+        /* beim Abbauen nicht stolpern */
+      }
+    }
+    this.cleanups = [];
+  }
+
+  // ---------- YouTube ----------
+
   async mountYouTube({ videoId, channelId }) {
     const params = new URLSearchParams({
-      enablejsapi: "1", autoplay: "1", mute: "1", playsinline: "1", rel: "0", origin: location.origin,
+      enablejsapi: "1", autoplay: "1", mute: "1", playsinline: "1", rel: "0",
+      origin: location.origin,
+      // Offizieller Parameter: sagt YouTube, welche Seite den Player einbettet.
+      widget_referrer: location.origin,
     });
     let src;
     if (videoId) src = `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?${params}`;
@@ -151,52 +221,185 @@ class Tile {
     });
     this.video.replaceChildren(iframe);
 
-    const YT = await loadYouTubeApi();
-    await new Promise((resolve) => {
-      const p = new YT.Player(iframe, {
-        events: {
-          onReady: () => {
-            this.player = {
-              mute: () => p.mute(),
-              unmute: () => { p.unMute(); p.setVolume(this.volume); p.playVideo(); },
-              setVolume: (v) => p.setVolume(v),
-            };
-            resolve();
+    const YT = await withTimeout(loadYouTubeApi(), 15_000, "Die YouTube-Player-API lädt nicht (Netzwerk oder CSP prüfen).");
+
+    // onError und eine Frist: ohne beides bliebe die Kachel bei abgeschalteter
+    // Einbettung stumm und ohne Erklärung stehen.
+    await withTimeout(
+      new Promise((resolve, reject) => {
+        const p = new YT.Player(iframe, {
+          events: {
+            onReady: () => {
+              this.player = {
+                mute: () => p.mute(),
+                unmute: () => { p.unMute(); p.setVolume(this.volume); p.playVideo(); },
+                setVolume: (v) => p.setVolume(v),
+              };
+              resolve();
+            },
+            onError: (e) => reject(new Error(youtubeErrorText(e.data, Boolean(channelId)))),
           },
-        },
-      });
-    });
+        });
+        this.cleanups.push(() => { try { p.destroy(); } catch { /* egal */ } });
+      }),
+      20_000,
+      channelId
+        ? "Der Player meldet sich nicht. Bei Kanal-Links heißt das meistens: der Kanal ist gerade nicht live."
+        : "Der Player meldet sich nicht. Das passiert, wenn YouTube die Einbettung für diese Seite ablehnt.",
+    );
     this.ready();
   }
 
+  // ---------- Twitch ----------
+
   async mountTwitch({ channel, video }) {
-    const Twitch = await loadTwitchApi();
+    // Twitch lehnt Einbettungen ohne HTTPS ab. Das ist die häufigste Ursache
+    // und als Meldung deutlich hilfreicher als ein schwarzes Rechteck.
+    const localhost = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+    if (location.protocol !== "https:" && !localhost) {
+      throw new Error(
+        `Twitch-Einbettungen brauchen HTTPS. Diese Seite läuft über ${location.protocol}//${location.hostname} – ` +
+        "bitte einen Reverse-Proxy mit HTTPS und einem echten Hostnamen davorsetzen.",
+      );
+    }
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(location.hostname)) {
+      throw new Error("Twitch-Einbettungen brauchen einen echten Hostnamen; eine IP-Adresse wird als parent nicht akzeptiert.");
+    }
+
+    const Twitch = await withTimeout(loadTwitchApi(), 15_000, "Das Twitch-Player-Skript lädt nicht (Netzwerk oder CSP prüfen).");
     const box = el("div", { id: "twitch-" + this.stream.id });
     this.video.replaceChildren(box);
     const p = new Twitch.Player(box, {
       ...(channel ? { channel } : { video }),
+      // Muss genau dem Hostnamen dieser Seite entsprechen.
       parent: [location.hostname],
       width: "100%",
       height: "100%",
       muted: true,
       autoplay: true,
     });
-    p.addEventListener(Twitch.Player.READY, () => {
-      this.player = {
-        mute: () => p.setMuted(true),
-        unmute: () => { p.setMuted(false); p.setVolume(this.volume / 100); p.play(); },
-        setVolume: (v) => p.setVolume(v / 100),
-      };
-      this.ready();
+    this.cleanups.push(() => { try { p.destroy?.(); } catch { /* egal */ } });
+
+    let offline = false;
+    p.addEventListener(Twitch.Player.OFFLINE, () => {
+      offline = true;
+      if (!this.player) return;
+      this.root.classList.add("offline");
+      this.nameEl.title = this.stream.name + " – gerade offline";
     });
+    p.addEventListener(Twitch.Player.ONLINE, () => {
+      offline = false;
+      this.root.classList.remove("offline");
+    });
+
+    await withTimeout(
+      new Promise((resolve) => p.addEventListener(Twitch.Player.READY, resolve)),
+      20_000,
+      offline
+        ? `Der Twitch-Kanal ${channel || video} ist gerade offline.`
+        : "Der Twitch-Player meldet sich nicht. Häufige Ursachen: Kanal offline, Einbettung vom Kanal untersagt, " +
+          "oder der parent-Hostname passt nicht zu dieser Seite.",
+    );
+    this.player = {
+      mute: () => p.setMuted(true),
+      unmute: () => { p.setMuted(false); p.setVolume(this.volume / 100); p.play(); },
+      setVolume: (v) => p.setVolume(v / 100),
+    };
+    this.ready();
   }
 
+  // ---------- fremde Seite als iframe ----------
+
   mountIframe(src) {
-    this.video.replaceChildren(el("iframe", { src, allow: "autoplay; fullscreen", allowfullscreen: "", title: this.stream.name }));
+    this.video.replaceChildren(
+      el("iframe", {
+        src,
+        allow: "autoplay; fullscreen",
+        allowfullscreen: "",
+        referrerpolicy: "strict-origin-when-cross-origin",
+        title: this.stream.name,
+      }),
+      // Ein blockiertes iframe lässt sich von außen nicht erkennen, deshalb der
+      // dauerhafte Hinweis statt einer Fehlermeldung, die nie kommt.
+      el("a", { class: "fallback-link", href: src, target: "_blank", rel: "noopener noreferrer" },
+        "Lädt nicht? " + providerLabel(src)),
+    );
     this.muteBtn.textContent = "Ton im Player";
     this.muteBtn.title = "Bei diesem Anbieter lässt sich der Ton nur im Player selbst steuern";
     this.soloBtn.hidden = true;
     this.vol.hidden = true;
+  }
+
+  // ---------- Browser-Wiedergabe (Zusatzmodus) ----------
+
+  async mountBrowser() {
+    if (!state.browser.enabled) {
+      throw new Error("Für diesen Stream ist die Browser-Wiedergabe eingestellt, der Server hat sie aber nicht eingeschaltet.");
+    }
+    this.setStatus("Browser-Sitzung wird gestartet …");
+    const session = await startBrowserSession(this.stream.id);
+
+    const video = el("video", {
+      autoplay: "", playsinline: "", muted: "", class: "browser-video", title: this.stream.name,
+    });
+    video.muted = true;
+    video.volume = this.volume / 100;
+
+    // Am Leben halten, solange die Kachel sichtbar ist. Ohne diese Meldungen
+    // räumt der Server die Sitzung nach dem Leerlauf-Timeout ab.
+    const keepalive = setInterval(() => {
+      browserApi(session.id, "keepalive", session.token).catch(() => {});
+    }, 25_000);
+    this.cleanups.push(() => clearInterval(keepalive));
+    this.cleanups.push(() => {
+      // keepalive:true, damit die Abmeldung auch beim Schließen der Seite rausgeht.
+      browserApi(session.id, "close", session.token, { keepalive: true }).catch(() => {});
+    });
+
+    this.setStatus("Bild und Ton werden verbunden …");
+    let pc;
+    try {
+      pc = await window.BackyardWhep.connect({
+        whepUrl: `/api/browser/sessions/${encodeURIComponent(session.id)}/whep`,
+        headers: { "X-Session-Token": session.token },
+        video,
+        onStatus: (msg) => this.setStatus(msg),
+      });
+    } catch (err) {
+      // Häufigster echter Fehler: der Browser des Zuschauers kennt den Codec
+      // nicht. Chromium-Bauten mancher Linux-Distributionen haben kein H.264.
+      if (/codecs not supported/i.test(err.message)) {
+        throw new Error(
+          "Dieser Browser kann das gesendete Videoformat nicht abspielen. " +
+          "Auf dem Server BROWSER_VIDEO_CODEC=vp8 setzen – VP8 beherrscht jeder WebRTC-Browser.",
+        );
+      }
+      throw err;
+    }
+    this.cleanups.push(() => { try { pc.close(); } catch { /* egal */ } });
+
+    pc.addEventListener("connectionstatechange", () => {
+      if (pc.connectionState === "failed") {
+        this.showError(
+          "Die WebRTC-Verbindung ist abgebrochen.",
+          "Meist fehlt die Freigabe des ICE-Ports 8189 (UDP und TCP) oder BROWSER_PUBLIC_HOST ist falsch gesetzt.",
+        );
+      }
+    });
+
+    this.video.replaceChildren(video);
+    this.root.classList.remove("loading");
+    this.root.classList.add("browser-mode");
+    this.player = {
+      mute: () => { video.muted = true; },
+      unmute: () => {
+        video.muted = false;
+        video.volume = this.volume / 100;
+        video.play().catch(() => {});
+      },
+      setVolume: (v) => { video.volume = Math.min(1, Math.max(0, v / 100)); },
+    };
+    this.ready();
   }
 
   ready() {
@@ -223,8 +426,59 @@ class Tile {
   }
 
   destroy() {
+    this.runCleanups();
     this.root.remove();
   }
+}
+
+/** Fehlercodes der YouTube-IFrame-API in verständlichen Text übersetzen. */
+function youtubeErrorText(code, isChannelLink) {
+  switch (code) {
+    case 2:
+      return "YouTube lehnt die Video-ID ab – der Link stimmt nicht.";
+    case 5:
+      return "Der YouTube-HTML5-Player meldet einen Fehler bei diesem Video.";
+    case 100:
+      return "Das Video gibt es nicht mehr oder es ist privat.";
+    case 101:
+    case 150:
+      return isChannelLink
+        ? "Der Kanal erlaubt keine Einbettung seines Livestreams, oder es läuft gerade keiner."
+        : "Der Rechteinhaber hat die Einbettung dieses Videos auf anderen Seiten untersagt. Das lässt sich hier nicht umgehen.";
+    default:
+      return `YouTube meldet Fehler ${code}.`;
+  }
+}
+
+// ---------- Browser-Wiedergabe: Server und WebRTC ----------
+
+function browserApi(sessionId, action, token, extra = {}) {
+  return fetch(`/api/browser/sessions/${encodeURIComponent(sessionId)}/${action}`, {
+    method: "POST",
+    headers: { "X-Session-Token": token, ...(extra.headers || {}) },
+    body: extra.body,
+    keepalive: Boolean(extra.keepalive),
+  });
+}
+
+async function startBrowserSession(streamId, retry = true) {
+  const headers = { "Content-Type": "application/json" };
+  const pw = store("browserPassword");
+  if (pw) headers["X-Browser-Password"] = pw;
+  const res = await fetch("/api/browser/sessions", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ streamId }),
+  });
+  if (res.status === 401 && retry) {
+    const entered = prompt("Passwort für die Browser-Wiedergabe:");
+    if (entered === null) throw new Error("Browser-Wiedergabe abgebrochen – Passwort erforderlich.");
+    store("browserPassword", entered);
+    return startBrowserSession(streamId, false);
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Sitzung konnte nicht gestartet werden (${res.status}).`);
+  return body;
 }
 
 // ---------- Ton steuern ----------
@@ -262,8 +516,9 @@ function renderGrid() {
   const seen = new Set();
   state.streams.forEach((s, i) => {
     let tile = state.tiles.get(s.id);
-    // Neu einbinden nur, wenn sich der Link geändert hat – sonst läuft der Stream weiter.
-    if (tile && tile.stream.url !== s.url) {
+    // Neu einbinden nur, wenn sich Link oder Wiedergabeart geändert haben –
+    // sonst läuft der Stream weiter.
+    if (tile && (tile.stream.url !== s.url || tile.stream.mode !== s.mode)) {
       tile.destroy();
       tile = null;
     }
@@ -313,15 +568,33 @@ function renderEditor() {
     };
     name.addEventListener("change", commit);
     url.addEventListener("change", commit);
-    return el("li", {},
+
+    const row = el("li", {},
       el("span", { class: "num" }, i + 1 + "."),
       name, url,
+    );
+
+    if (state.browser.enabled) {
+      const box = el("input", { type: "checkbox", ...(s.mode === "browser" ? { checked: "" } : {}) });
+      box.addEventListener("change", () =>
+        edit((streams) => {
+          const t = streams.find((x) => x.id === s.id);
+          if (box.checked) t.mode = "browser";
+          else delete t.mode;
+        }),
+      );
+      row.append(el("label", { class: "mode", title: "Serverseitigen Browser verwenden (nur für eigene oder ausdrücklich freigegebene Quellen)" }, box, "Browser"));
+    }
+
+    row.append(
+      el("button", { class: "btn small", title: "Prüfen, warum die Einbettung nicht läuft", onclick: () => runDiagnose(s.url) }, "Diagnose"),
       el("button", { class: "btn small", title: "Nach oben", onclick: () => move(i, -1) }, "↑"),
       el("button", { class: "btn small", title: "Nach unten", onclick: () => move(i, 1) }, "↓"),
       el("button", { class: "btn small danger", title: "Entfernen", onclick: () => {
         if (confirm(`„${s.name}“ entfernen?`)) edit((streams) => streams.splice(i, 1));
       } }, "✕"),
     );
+    return row;
   }));
 }
 
@@ -337,8 +610,32 @@ function message(text, isError = false) {
   m.classList.toggle("error", isError);
 }
 
+/** Server-Diagnose für einen Link anzeigen (nur Admin). */
+async function runDiagnose(url) {
+  const out = $("#diagnose-out");
+  out.hidden = false;
+  out.textContent = "Wird geprüft …";
+  const headers = {};
+  const pw = store("password");
+  if (pw) headers["X-Admin-Password"] = pw;
+  try {
+    const res = await fetch("/api/diagnose?url=" + encodeURIComponent(url), { headers });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `Fehler ${res.status}`);
+    const lines = [`${body.url}`, `Erkannt als: ${body.kind || "unbekannt"}`, ""];
+    for (const c of body.checks || []) lines.push(`• ${c.check} [HTTP ${c.status}]: ${c.detail}`);
+    if (body.verdict) lines.push("", "Ergebnis: " + body.verdict);
+    out.textContent = lines.join("\n");
+  } catch (err) {
+    out.textContent = "Diagnose fehlgeschlagen: " + err.message;
+  }
+}
+
 async function resolveHandle(url) {
-  const res = await fetch("/api/resolve?url=" + encodeURIComponent(url));
+  const headers = {};
+  const pw = store("password");
+  if (pw) headers["X-Admin-Password"] = pw;
+  const res = await fetch("/api/resolve?url=" + encodeURIComponent(url), { headers });
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || "Kanal nicht gefunden");
   return "https://www.youtube.com/channel/" + body.channelId;
@@ -417,6 +714,18 @@ async function init() {
     if (!tile) return;
     e.shiftKey ? solo(tile) : toggle(tile);
   });
+
+  // Browser-Sitzungen beim Verlassen der Seite freigeben, statt auf das
+  // Leerlauf-Timeout zu warten.
+  window.addEventListener("pagehide", () => {
+    for (const tile of state.tiles.values()) if (tile.stream.mode === "browser") tile.destroy();
+  });
+
+  state.browser = await fetch("/api/browser/config")
+    .then((r) => (r.ok ? r.json() : { enabled: false }))
+    .catch(() => ({ enabled: false }));
+  document.body.classList.toggle("browser-available", Boolean(state.browser.enabled));
+  for (const node of document.querySelectorAll(".browser-only")) node.hidden = !state.browser.enabled;
 
   const res = await fetch("/api/streams");
   state.streams = await res.json();
